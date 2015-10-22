@@ -1,0 +1,124 @@
+---
+title: "Sample EAR Database for entry into FTN"
+author: "Michael Rahija"
+date: "October 2015"
+output: html_document
+---
+
+```{r include=FALSE, cache=FALSE}
+library(DT)
+library(dplyr)
+library(xlsx)
+library(tidyr)
+library(ggplot2)
+library(RColorBrewer)
+library(data.table)
+library(maps)
+library(countrycode)
+library(scales)
+sys <- Sys.info()
+
+if(sys[7] == "josh"){
+  dir = "~/Documents/Github/EAR_pilot/"
+} else if(sys[5] == "x86_64"){
+  dir = "~/Dropbox/FAO_ESS_STUFF/EAR_pilot" #Mac
+  data.dir = "~/Dropbox/FAO_ESS_STUFF/EAR_pilot_data/" 
+} else if (sys[5] == "Michael"){
+  dir = "C:/Users/Michael/Dropbox/FAO_ESS_STUFF/EAR_pilot"#HOME PC
+  data.dir = "C:/Users/Michael/Dropbox/FAO_ESS_STUFF/EAR_pilot_data/"
+} else if (sys[6]=="Rahija") {
+  dir = "C:/Users/rahija/Dropbox/FAO_ESS_STUFF/EAR_pilot" #FAO PC
+  data.dir = "C:/Users/rahija/Dropbox/FAO_ESS_STUFF/EAR_pilot_data/"
+} else {
+  stop("Implement location for current user!")
+}
+
+setwd(dir)
+
+data <- read.csv(paste0(data.dir,"relevant_variables2.csv"), stringsAsFactors = FALSE)
+data <- read.csv(paste0(data.dir,"relevant_variables2.csv"), stringsAsFactors = FALSE)
+
+
+
+## Clean data set, and filter for operationnaly active
+source("R/cleanAndFilterFPMIS.R")
+data.o <- cleanAndFilterFPMIS(data, ActiveOnly = FALSE)
+
+##clean up project titles
+data.o$ProjectTitle <- gsub("Ž","é", data.o$ProjectTitle)
+data.o$ProjectTitle <- gsub("ci—n","ción", data.o$ProjectTitle)
+data.o$ProjectTitle <- gsub("mise en .*uvre ","mise en ouvre ", data.o$ProjectTitle)
+
+
+## Add staff column
+data.o$staff <- paste(data.o$ProjectStaffBudgetHolder,
+                      data.o$ProjectStaffLTOOfficer,
+                      data.o$ProjectStaffLTUOfficer,
+                      data.o$ProjectStaffProgrammeAssistance)
+
+
+
+data.o <- filter(data.o, ProjectStatus == "Operationally Active" &
+                   ProjectClassification == "Assistance to Member Countries")
+
+source("R/addTeam.R")
+data.o <- addTeam(data.o)
+
+data.t <- select(data.o, ProjectTitle,ActualNTE, CountryName,TotalBudgetFPMIS, staff, team, ProjectSymbol)
+
+
+
+```
+
+
+
+```{r, echo=FALSE}
+datatable(data.t, filter = "top")
+```
+
+
+```{r, echo=FALSE}
+mapData <- data.table(map_data(map = "world"))
+
+## Repair polygons that wrap around the world
+getNewGroup = function(d){
+    n = nrow(d)
+    newGroup = d[1:(n-1), group] == d[2:n, group] &
+               abs(d[1:(n-1), long] - d[2:n, long]) > 180
+    ## Don't switch right at the start
+    newGroup = c(FALSE, newGroup)
+    groupIndex = cumsum(newGroup)
+    ## Each new group gets the old group number + 10,000 times the index
+    d[, group] + 10000 * groupIndex
+}
+mapData$long[mapData$long >= 210] = mapData$long[mapData$long >= 210] - 360
+invisible(mapData[, newGroup := getNewGroup(.SD), by = region])
+
+summTab <- data.o %>%
+    group_by(CountryName) %>%
+    dplyr::summarize(Activities = n())
+
+summTab$region <- summTab$CountryName
+summTab$region = gsub(",( Federal Democratic | Democratic | the | The | United | )Republic (o|O)f", "",
+                      summTab$region)
+summTab$region = gsub(" , Kingdom of", "", summTab$region)
+
+missingCountries <- merge(mapData, summTab, by = "region", all.y = TRUE)
+missingCountries <- missingCountries %>% filter(is.na(lat))
+## Check which countries are missing if running line by line:
+# missingCountries
+
+## Alternative approach using countrycode package: 
+# temp$region = countrycode(temp$region, origin = "country.name",
+#                           dest = "country.name", warn = TRUE)
+# missingCountries <- merge(mapData, temp, by = "region", all.y = TRUE)
+# missingCountries <- missingCountries %>% filter(is.na(lat))
+# missingCountries
+
+mapData <- merge(as.data.frame(mapData), summTab, by = "region", all.x = TRUE)
+mapData <- mapData %>% arrange(order)
+
+qplot(long, lat, fill = Activities, data = mapData, group = group,
+     geom ="polygon", ylab="", xlab="") +
+     scale_fill_continuous()
+```

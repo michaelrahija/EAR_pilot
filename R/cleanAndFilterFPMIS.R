@@ -1,6 +1,6 @@
 #This script cleans up FPMIS data
 
-cleanAndFilterFPMIS <- function(data, ActiveOnly = FALSE){
+cleanAndFilterFPMIS <- function(data, ActiveOnly = FALSE, fixDate = FALSE){
   
   #clean up column names
   cols <- colnames(data) 
@@ -10,8 +10,11 @@ cleanAndFilterFPMIS <- function(data, ActiveOnly = FALSE){
   #convert date columns from characters
 #   data$ActualEOD <- as.POSIXct(data$ActualEOD,"mm/dd/YY")
 #   data$ActualNTE <- as.POSIXct(data$ActualNTE,"YYYY-MM-DD")
+
+  if(fixDate == TRUE){
   data$ActualNTE <-as.Date(data$ActualNTE, format = "%m/%d/%Y")
   data$ActualEOD <-as.Date(data$ActualEOD, format = "%d/%b/%Y")
+  }
 
   #redefine data frame
   data.o <- data
