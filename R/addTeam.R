@@ -41,6 +41,11 @@ addTeam <- function(data.o){
   
   data.o$team[amis2.index] <- "Team G"
   
+  agris.index <- grepl("agris", data.o$ProjectTitle,
+                       ignore.case = TRUE)
+  
+  data.o$team[agris.index] <- "Team G"
+  
   #fill in team d - food security
   fs.index <- grepl("food security", data.o$ProjectTitle,
                     ignore.case = TRUE)

@@ -1,0 +1,87 @@
+---
+title: "Donor"
+author: "Michael Rahija"
+date: "November 2015"
+output: pdf_document
+---
+
+```{r include=FALSE, cache=FALSE}
+library(DT)
+library(dplyr)
+library(xlsx)
+library(tidyr)
+library(ggplot2)
+library(RColorBrewer)
+library(data.table)
+library(maps)
+library(countrycode)
+library(scales)
+sys <- Sys.info()
+
+if(sys[7] == "josh"){
+  dir = "~/Documents/Github/EAR_pilot/"
+} else if(sys[5] == "x86_64"){
+  dir = "~/Dropbox/FAO_ESS_STUFF/EAR_pilot" #Mac
+  data.dir = "~/Dropbox/FAO_ESS_STUFF/EAR_pilot_data/" 
+} else if (sys[5] == "Michael"){
+  dir = "C:/Users/Michael/Dropbox/FAO_ESS_STUFF/EAR_pilot"#HOME PC
+  data.dir = "C:/Users/Michael/Dropbox/FAO_ESS_STUFF/EAR_pilot_data/"
+} else if (sys[6]=="Rahija") {
+  dir = "C:/Users/rahija/Dropbox/FAO_ESS_STUFF/EAR_pilot" #FAO PC
+  data.dir = "C:/Users/rahija/Dropbox/FAO_ESS_STUFF/EAR_pilot_data/"
+} else {
+  stop("Implement location for current user!")
+}
+
+setwd(dir)
+
+
+data <- read.csv(paste0(data.dir,"relevant_variables_idfunder.csv"), stringsAsFactors = FALSE)
+
+
+
+## Clean data set, and filter for operationnaly active
+source("R/cleanAndFilterFPMIS.R")
+data.o <- cleanAndFilterFPMIS(data, ActiveOnly = FALSE)
+
+##clean up project titles
+data.o$ProjectTitle <- gsub("Ž","é", data.o$ProjectTitle)
+data.o$ProjectTitle <- gsub("ci—n","ción", data.o$ProjectTitle)
+data.o$ProjectTitle <- gsub("mise en .*uvre ","mise en ouvre ", data.o$ProjectTitle)
+
+
+## Add staff column
+data.o$staff <- paste(data.o$ProjectStaffBudgetHolder,
+                      data.o$ProjectStaffLTOOfficer,
+                      data.o$ProjectStaffLTUOfficer,
+                      data.o$ProjectStaffProgrammeAssistance)
+
+
+
+data.o <- filter(data.o, ProjectStatus == "Operationally Active" &
+                   ProjectClassification == "Assistance to Member Countries")
+
+source("R/addTeam.R")
+data.o <- addTeam(data.o)
+
+```
+
+Two things were discorvered:
+
+ 
+1. We can use use #27: **RecipientCountriesAll** as another source of information for countries. 
+2. The following can be potential sources of funders
+    + DonorandFundingSource
+    + Donor
+    + FinancialsDonorReference
+    + FinancialsProjectFundingInstitution
+    + FundingSource
+    
+```{r include=FALSE}
+colnames(data.o)
+
+```
+
+
+
+

@@ -1,0 +1,256 @@
+---
+title: "AGSTATS v2"
+author: "Michael Rahija"
+date: "January 27, 2016"
+output: pdf_document
+---
+
+
+
+```{r, echo=FALSE,fig.pos="placeHere",include=FALSE, cache=FALSE}
+#create maps
+
+#create maps and figures for analysis
+
+#-- import data and packages
+library(DT)
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(maps)
+library(countrycode)
+library(scales)
+library(igraph)
+library(gisfao)
+library(sp)
+
+sys <- Sys.info()
+
+if(sys[7] == "josh"){
+  dir = "~/Documents/Github/EAR_pilot/"
+} else if(sys[5] == "x86_64"){
+  dir = "~/Dropbox/FAO_ESS_STUFF/EAR_pilot" #Mac
+  data.dir = "~/Dropbox/FAO_ESS_STUFF/EAR_pilot_data/" 
+} else if (sys[5] == "Michael"){
+  dir = "C:/Users/Michael/Dropbox/FAO_ESS_STUFF/EAR_pilot"#HOME PC
+  data.dir = "C:/Users/Michael/Dropbox/FAO_ESS_STUFF/EAR_pilot_data/"
+} else if (sys[6]=="Rahija") {
+  dir = "C:/Users/rahija/Dropbox/FAO_ESS_STUFF/EAR_pilot" #FAO PC
+  data.dir = "C:/Users/rahija/Dropbox/FAO_ESS_STUFF/EAR_pilot_data/"
+} else {
+  stop("Implement location for current user!")
+}
+
+setwd(dir)
+
+data <- read.csv(paste0(data.dir,"agstats_final_for narrative_v2.csv"), 
+                 stringsAsFactors = FALSE)
+
+
+source("R/cleanFigures.R")
+data <- cleanFigures(data)
+
+ca <- read.csv(paste0(data.dir,"asci_scores.csv"), 
+                 stringsAsFactors = FALSE)
+
+ca$country <- countrycode(ca$country, origin = "country.name",
+                          destination = "country.name")
+```
+
+
+# Project Type/Classification
+
+## No of projects by type
+```{r}
+tab <- data %>%
+            group_by(projectType) %>%
+            summarize(noProject = n())
+
+knitr::kable(tab)            
+```
+
+## Total budget for each project type
+```{r}
+tab <- data %>%
+            group_by(projectType) %>%
+            summarize(totalBudget = sum(budget))
+
+knitr::kable(tab)            
+```
+
+# Total budgets by donors
+
+```{r}
+tab <- data %>%
+            group_by(donor) %>%
+            summarize(totalBudget = sum(budget))
+tab <- arrange(tab, desc(totalBudget))
+
+knitr::kable(tab)
+```
+
+# Regional level
+## Total budget by donor and region
+```{r}
+tab <- data %>%
+            group_by(Region, donor) %>%
+            summarize(totalBudget = sum(budget))
+
+tab <- arrange(tab, Region, donor, totalBudget)
+knitr::kable(tab)
+
+```
+
+## Total budget by region
+```{r}
+tab <- data %>%
+            group_by(Region) %>%
+            summarize(totalBudget = sum(budget))
+
+tab <- arrange(tab, desc(totalBudget))
+knitr::kable(tab)
+```
+
+# TOTAL BUDGET, BY REGIONS **SUBSET FOR assCountry = 1**
+```{r}
+country <- filter(data, assCountry == 1)
+
+#--------CREATE DF FOR EXPENDITURES BY COUNTRY AND MERGE CENTROIDS
+
+#Get expenditure data 
+test.c <- colnames(country) %in% NA
+country <- country[!test.c]
+
+data.d <- select(country, country, budget, donor)
+data.d <- filter(data.d, !is.na(budget))
+
+x <- strsplit(data.d$country,",")
+
+data.d$denom <- sapply(x,length)
+
+options(scipen = 999)
+
+data.d$totl <- data.d$budget/data.d$denom
+
+#HACK TO REMOVE DUPS################################
+test <- duplicated(data.d$totl)
+n <- 1:length(data.d$totl[test])
+data.d$totl[test] <- data.d$totl[test] + n/100
+####################################################
+names(x) <- data.d$totl
+
+
+
+x1 = lapply(names(x), function(name){
+  data.frame(amount = name,
+             country = x[[name]])
+})
+
+master <- do.call("rbind", x1)
+master$country <- as.character(master$country)
+master$amount <- as.numeric(as.character(master$amount))
+master$country[master$country == "Cameroun"] <- "Cameroon"
+master$country <- countrycode(master$country, origin = "country.name",
+                                destination = "country.name", warn = TRUE)
+
+master <- master %>% 
+            group_by(country) %>%
+            summarize(amount = sum(amount))
+
+tab <- arrange(master, desc(amount))
+
+
+knitr::kable(tab) 
+```
+
+# Scatterplot w/ CA score and country budget
+
+```{r}
+#--------CREATE DF FOR EXPENDITURES BY COUNTRY AND MERGE CA score
+africa <- filter(data, Region == "Africa" & assCountry == 1)
+
+#Get expenditure data 
+test.c <- colnames(africa) %in% NA
+africa <- africa[!test.c]
+
+data.d <- select(africa, country, budget, donor)
+data.d <- filter(data.d, !is.na(budget))
+
+x <- strsplit(data.d$country,",")
+
+data.d$denom <- sapply(x,length)
+
+options(scipen = 999)
+
+data.d$totl <- data.d$budget/data.d$denom
+
+#HACK TO REMOVE DUPS################################
+test <- duplicated(data.d$totl)
+n <- 1:length(data.d$totl[test])
+data.d$totl[test] <- data.d$totl[test] + n/100
+####################################################
+
+names(x) <- data.d$totl
+
+x1 = lapply(names(x), function(name){
+  data.frame(amount = name,
+             country = x[[name]])
+})
+
+master <- do.call("rbind", x1)
+master$country <- as.character(master$country)
+master$amount <- as.numeric(as.character(master$amount))
+master$country <- countrycode(master$country, origin = "country.name",
+                                destination = "country.name", warn = TRUE)
+
+master <- master %>% 
+            group_by(country) %>%
+            summarize(amount = sum(amount))
+
+master <- merge(master, ca, by.x = "country", by.y = "country",
+                all = TRUE)
+
+master$country <- countrycode(master$country, origin = "country.name",
+                              destination = "iso3c")
+
+master <- filter(master, !is.na(amount))
+master <- filter(master, !is.na(score))
+master$score <- as.numeric(master$score)
+
+#create score group
+# master$score.g[master$score > (mean(master$score) + .5*sd(master$score)) &
+#                master$amount < ] <- "high score, low committment"
+
+n = .15
+master$score.g[master$score < (mean(master$score) - n*sd(master$score)) &
+               master$amount < (mean(master$amount) - n*sd(master$amount))] <- "low score, low support"
+
+master$score.g[master$score < (mean(master$score) - n*sd(master$score)) &
+               master$amount > (mean(master$amount) - n*sd(master$amount))] <- "low score, mid-high support"
+
+master$score.g[master$score > (mean(master$score) - n*sd(master$score)) &
+               master$amount < (mean(master$amount) - n*sd(master$amount))] <- "mid-high score, low support"
+
+master$score.g[master$score > (mean(master$score) - n*sd(master$score)) &
+               master$amount > (mean(master$amount) - n*sd(master$amount))] <- "mid-high score, mid-high support"
+
+
+
+master$score.g[is.na(master$score.g)] <- NA
+master$amount.mil <- master$amount/1000000
+
+ggplot(master, aes(x=amount.mil, y=score)) +
+    geom_point(aes(col = score.g), size = 3) + 
+    geom_text(aes(label=country), size = 3) +
+    theme(legend.position="bottom",
+          legend.title = element_blank()) +
+    guides(colour = guide_legend(override.aes = list(size=5), 
+                                 nrow = 2, byrow = TRUE)) +
+    labs(x = "Total Amount Spent in Millions (active 2015)", y = "Country Assessment Score (2013)") +
+    theme(axis.line = element_line(colour = "black"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()) 
+
+```
